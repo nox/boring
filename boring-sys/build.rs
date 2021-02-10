@@ -171,9 +171,33 @@ fn get_boringssl_cmake_config() -> cmake::Config {
     }
 }
 
+fn ensure_rpk_patch_applied() {
+    if std::fs::metadata("deps/boringssl/.has_rpk_patch").is_ok() {
+        return;
+    }
+
+    let src_path =
+        std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/deps/boringssl/src")).unwrap();
+
+    let cmd_path = std::fs::canonicalize(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../scripts/apply_rpk_patch.sh"
+    ))
+    .unwrap();
+
+    std::process::Command::new(cmd_path)
+        .current_dir(src_path)
+        .spawn()
+        .expect("failed to apply RPK patch");
+
+    std::fs::write("deps/boringssl/.has_rpk_patch", b"").unwrap();
+}
+
 fn main() {
     use std::env;
     use std::path::PathBuf;
+
+    ensure_rpk_patch_applied();
 
     let mut cfg = get_boringssl_cmake_config();
 
