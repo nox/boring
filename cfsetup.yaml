@@ -1,0 +1,82 @@
+---
+builddeps_external: &builddeps_external
+  ? libssl-dev
+  ? libclang-dev
+  ? llvm-dev
+  ? clang
+  ? pkg-config
+  ? ssh
+  ? build-essential
+  ? cmake
+
+builddeps_internal: &builddeps_internal
+  ? rust
+  ? cargo-deb
+
+testdeps_internal: &testdeps_internal
+  ? cargo-to-teamcity
+
+# build depedencies that exist in public package repos, required to obtain
+# access to our internal package repos
+builddeps_allow_internal: &builddeps_allow_internal
+  ? curl
+  ? gnupg
+
+all: &all
+  template_debian: &template_debian
+    builddeps:
+      <<: *builddeps_external
+      <<: *builddeps_internal
+    pre-cache:
+      - export OPENSSL_DIR=/usr/include/openssl
+    post-cache:
+      - echo "replace me"
+      - false
+
+  template_ubuntu: &template_ubuntu
+    base-image: docker-registry.cfdata.org/stash/cf/cfsetup-images/ubuntu-bionic/master:31-0723223bf4ab
+    builddeps:
+      <<: *builddeps_external
+      <<: *builddeps_allow_internal
+    pre-cache:
+      - export OPENSSL_DIR=/usr/include/openssl
+      - echo 'deb https://apt.cfdata.org/v2/any stable common cloudflare' >> /etc/apt/sources.list.d/cloudflare.list
+      - echo 'deb https://apt.cfdata.org/v2/stretch stable common cloudflare' >> /etc/apt/sources.list.d/cloudflare.list
+      - curl -o - https://apt.cfdata.org/public.gpg | apt-key add -
+      # replace "internal packages here" with required packages from our apt repos
+      - apt-get update && apt-get install -y "internal packages here"
+    post-cache:
+      - echo "replace me"
+      - false
+
+  lint:
+    <<: *template_debian
+    post-cache:
+      - cargo fmt --all -- --check
+
+  test: &test
+    <<: *template_debian
+    privileged:
+      - true
+    builddeps:
+      <<: *builddeps_external
+      <<: *builddeps_internal
+      <<: *testdeps_internal
+    post-cache: &postcache_test
+      - RUSTFLAGS="-D warnings" cargo test
+
+  test-bionic:
+    <<: *template_ubuntu
+    <<: *test
+    builddeps:
+      <<: *builddeps_external
+      <<: *builddeps_allow_internal
+    pre-cache:
+      - export OPENSSL_DIR=/usr/include/openssl
+      - echo 'deb https://apt.cfdata.org/v2/any stable common cloudflare' >> /etc/apt/sources.list.d/cloudflare.list
+      - echo 'deb https://apt.cfdata.org/v2/stretch stable common cloudflare' >> /etc/apt/sources.list.d/cloudflare.list
+      - curl -o - https://apt.cfdata.org/public.gpg | apt-key add -
+      - apt-get update && apt-get install -y rust cargo-deb cargo-to-teamcity
+
+buster: *all
+default-flavor: buster
