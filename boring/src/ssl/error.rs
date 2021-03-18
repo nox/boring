@@ -110,7 +110,7 @@ impl fmt::Display for Error {
             },
             ErrorCode::SSL => match self.ssl_error() {
                 Some(e) => write!(fmt, "{}", e),
-                None => fmt.write_str("OpenSSL error"),
+                None => fmt.write_str("unknown BoringSSL error"),
             },
             ErrorCode(code) => write!(fmt, "unknown error code {}", code),
         }
@@ -150,27 +150,31 @@ impl<S: fmt::Debug> StdError for HandshakeError<S> {
     }
 }
 
-impl<S: fmt::Debug> fmt::Display for HandshakeError<S> {
+impl<S> fmt::Display for HandshakeError<S> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
-            HandshakeError::SetupFailure(ref e) => write!(f, "stream setup failed: {}", e)?,
-            HandshakeError::Failure(ref s) => {
-                write!(f, "the handshake failed: {}", s.error())?;
-                let verify = s.ssl().verify_result();
-                if verify != X509VerifyResult::OK {
-                    write!(f, ": {}", verify)?;
-                }
+            HandshakeError::SetupFailure(ref e) => {
+                write!(f, "TLS stream setup failed {}", e)
             }
+            HandshakeError::Failure(ref s) => fmt_mid_handshake_error(s, f, "TLS handshake failed"),
             HandshakeError::WouldBlock(ref s) => {
-                write!(f, "the handshake was interrupted: {}", s.error())?;
-                let verify = s.ssl().verify_result();
-                if verify != X509VerifyResult::OK {
-                    write!(f, ": {}", verify)?;
-                }
+                fmt_mid_handshake_error(s, f, "TLS handshake interrupted")
             }
         }
-        Ok(())
     }
+}
+
+fn fmt_mid_handshake_error(
+    s: &MidHandshakeSslStream<impl Sized>,
+    f: &mut fmt::Formatter,
+    prefix: &str,
+) -> fmt::Result {
+    match s.ssl().verify_result() {
+        X509VerifyResult::OK => write!(f, "{}", prefix)?,
+        verify => write!(f, "{}: cert verification failed - {}", prefix, verify)?,
+    }
+
+    write!(f, " {}", s.error())
 }
 
 impl<S> From<ErrorStack> for HandshakeError<S> {
