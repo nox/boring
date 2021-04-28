@@ -1,3 +1,4 @@
+use boring::pkey::PKey;
 use boring::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
 use futures::future;
 use std::future::Future;
@@ -33,7 +34,9 @@ async fn google() {
     assert!(response.ends_with("</html>") || response.ends_with("</HTML>"));
 }
 
-fn create_server() -> (
+fn create_server(
+    rpk: bool,
+) -> (
     impl Future<Output = Result<SslStream<TcpStream>, HandshakeError<TcpStream>>>,
     SocketAddr,
 ) {
@@ -45,13 +48,27 @@ fn create_server() -> (
     let addr = listener.local_addr().unwrap();
 
     let server = async move {
-        let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
-        acceptor
-            .set_private_key_file("tests/key.pem", SslFiletype::PEM)
-            .unwrap();
-        acceptor
-            .set_certificate_chain_file("tests/cert.pem")
-            .unwrap();
+        let acceptor = if rpk {
+            let mut acceptor = SslAcceptor::rpk().unwrap();
+            let pkey = std::fs::read("tests/key.pem").unwrap();
+            let pkey = PKey::private_key_from_pem(&pkey).unwrap();
+            let cert = std::fs::read("tests/pubkey.der").unwrap();
+
+            acceptor.set_rpk_certificate(&cert).unwrap();
+            acceptor.set_null_chain_private_key(&pkey).unwrap();
+
+            acceptor
+        } else {
+            let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
+            acceptor
+                .set_private_key_file("tests/key.pem", SslFiletype::PEM)
+                .unwrap();
+            acceptor
+                .set_certificate_chain_file("tests/cert.pem")
+                .unwrap();
+
+            acceptor
+        };
         let acceptor = acceptor.build();
 
         let stream = listener.accept().await.unwrap().0;
@@ -64,7 +81,7 @@ fn create_server() -> (
 
 #[tokio::test]
 async fn server() {
-    let (stream, addr) = create_server();
+    let (stream, addr) = create_server(false);
 
     let server = async {
         let mut stream = stream.await.unwrap();
@@ -100,8 +117,72 @@ async fn server() {
 }
 
 #[tokio::test]
+async fn server_rpk() {
+    let (stream, addr) = create_server(true);
+
+    let server = async {
+        let mut stream = stream.await.unwrap();
+        let mut buf = [0; 4];
+        stream.read_exact(&mut buf).await.unwrap();
+        assert_eq!(&buf, b"asdf");
+
+        stream.write_all(b"jkl;").await.unwrap();
+
+        future::poll_fn(|ctx| Pin::new(&mut stream).poll_shutdown(ctx))
+            .await
+            .unwrap();
+    };
+
+    let client = async {
+        let mut connector = SslConnector::rpk_builder().unwrap();
+        let cert = std::fs::read("tests/pubkey.der").unwrap();
+
+        connector.set_rpk_certificate(&cert).unwrap();
+        let config = connector.build().configure().unwrap();
+
+        let stream = TcpStream::connect(&addr).await.unwrap();
+        let mut stream = tokio_boring::connect(config, "localhost", stream)
+            .await
+            .unwrap();
+
+        stream.write_all(b"asdf").await.unwrap();
+
+        let mut buf = vec![];
+        stream.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf, b"jkl;");
+    };
+
+    future::join(server, client).await;
+}
+
+#[tokio::test]
+async fn client_rpk_unknown_cert() {
+    let (stream, addr) = create_server(true);
+
+    let server = async {
+        assert!(stream.await.is_err());
+    };
+
+    let client = async {
+        let mut connector = SslConnector::rpk_builder().unwrap();
+        let cert = std::fs::read("tests/pubkey2.der").unwrap();
+
+        connector.set_rpk_certificate(&cert).unwrap();
+        let config = connector.build().configure().unwrap();
+
+        let stream = TcpStream::connect(&addr).await.unwrap();
+
+        assert!(tokio_boring::connect(config, "localhost", stream)
+            .await
+            .is_err());
+    };
+
+    future::join(server, client).await;
+}
+
+#[tokio::test]
 async fn handshake_error() {
-    let (stream, addr) = create_server();
+    let (stream, addr) = create_server(false);
 
     let server = async {
         let err = stream.await.unwrap_err();
