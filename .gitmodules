@@ -1,4 +1,4 @@
 [submodule "boring-sys/deps/boringssl"]
 	path = boring-sys/deps/boringssl
-	url = https://github.com/google/boringssl.git
+	url = ssh://git@stash.cfops.it:7999/sys/boringssl.git
 	ignore = dirty
