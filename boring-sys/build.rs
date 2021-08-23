@@ -1,4 +1,6 @@
 // NOTE: this build script is adopted from quiche (https://github.com/cloudflare/quiche)
+use std::path::PathBuf;
+use std::process::Command;
 
 // Additional parameters for Android build of BoringSSL.
 //
@@ -159,16 +161,23 @@ fn get_boringssl_cmake_config() -> cmake::Config {
         _ => {
             // Configure BoringSSL for building on 32-bit non-windows platforms.
             if arch == "x86" && os != "windows" {
-                boringssl_cmake.define(
-                    "CMAKE_TOOLCHAIN_FILE",
-                    pwd.join("deps/boringssl/src/util/32-bit-toolchain.cmake")
-                        .as_os_str(),
-                );
+                let toolchain_file = if cfg!(feature = "fips") {
+                    "deps/boringssl/util/32-bit-toolchain.cmake"
+                } else {
+                    "deps/boringssl/src/util/32-bit-toolchain.cmake"
+                };
+
+                boringssl_cmake
+                    .define("CMAKE_TOOLCHAIN_FILE", pwd.join(toolchain_file).as_os_str());
             }
 
             boringssl_cmake
         }
     }
+}
+
+fn boring_ssl_path() -> PathBuf {
+    std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/deps/boringssl/")).unwrap()
 }
 
 fn ensure_rpk_patch_applied() {
@@ -177,7 +186,7 @@ fn ensure_rpk_patch_applied() {
     }
 
     let src_path =
-        std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/deps/boringssl/src")).unwrap();
+        std::fs::canonicalize(format!("{}/src", boring_ssl_path().to_str().unwrap())).unwrap();
 
     let cmd_path = std::fs::canonicalize(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -185,7 +194,7 @@ fn ensure_rpk_patch_applied() {
     ))
     .unwrap();
 
-    std::process::Command::new(cmd_path)
+    Command::new(cmd_path)
         .current_dir(src_path)
         .spawn()
         .expect("failed to apply RPK patch");
@@ -195,9 +204,35 @@ fn ensure_rpk_patch_applied() {
 
 fn main() {
     use std::env;
-    use std::path::PathBuf;
 
-    ensure_rpk_patch_applied();
+    const FIPS_COMMIT: &str = "ae223d6138807a13006342edfeef32e813246b39";
+    const BORING_SSL_COMMIT: &str = "067cfd92f4d7da0edfa073b096d090b98a83b860";
+
+    let revision = if cfg!(feature = "fips") {
+        FIPS_COMMIT
+    } else {
+        BORING_SSL_COMMIT
+    };
+
+    Command::new("git")
+        .args(&["reset", "--hard", revision])
+        .current_dir(boring_ssl_path())
+        .spawn()
+        .expect("failed to checkout commit")
+        .wait()
+        .expect("failed to checkout commit");
+
+    Command::new("git")
+        .args(&["clean", "-f", "-d"])
+        .current_dir(boring_ssl_path())
+        .spawn()
+        .expect("failed to git clean")
+        .wait()
+        .expect("failed to git clean");
+
+    if !cfg!(feature = "fips") {
+        ensure_rpk_patch_applied();
+    }
 
     let mut cfg = get_boringssl_cmake_config();
 
@@ -206,10 +241,19 @@ fn main() {
             .cxxflag("-DBORINGSSL_UNSAFE_FUZZER_MODE");
     }
 
+    if cfg!(feature = "fips") {
+        cfg.define("FIPS", "1");
+    }
+
     let bssl_dir = cfg.build_target("bssl").build().display().to_string();
     let build_path = get_boringssl_platform_output_path();
     let build_dir = format!("{}/build/{}", bssl_dir, build_path);
-    println!("cargo:rustc-link-search=native={}", build_dir);
+    if cfg!(feature = "fips") {
+        println!("cargo:rustc-link-search=native={}/crypto", build_dir);
+        println!("cargo:rustc-link-search=native={}/ssl", build_dir);
+    } else {
+        println!("cargo:rustc-link-search=native={}", build_dir);
+    }
 
     println!("cargo:rustc-link-lib=static=crypto");
     println!("cargo:rustc-link-lib=static=ssl");
@@ -219,7 +263,12 @@ fn main() {
         println!("cargo:rustc-cdylib-link-arg=-Wl,-undefined,dynamic_lookup");
     }
 
-    let include_path = PathBuf::from("deps/boringssl/src/include");
+    let include_path = if cfg!(feature = "fips") {
+        PathBuf::from("deps/boringssl/include")
+    } else {
+        PathBuf::from("deps/boringssl/src/include")
+    };
+
     let mut builder = bindgen::Builder::default()
         .derive_copy(true)
         .derive_debug(true)
@@ -239,6 +288,7 @@ fn main() {
         "aes.h",
         "asn1_mac.h",
         "asn1t.h",
+        #[cfg(not(feature = "fips"))]
         "blake2.h",
         "blowfish.h",
         "cast.h",
@@ -263,8 +313,11 @@ fn main() {
         "ripemd.h",
         "siphash.h",
         "srtp.h",
+        #[cfg(not(feature = "fips"))]
         "trust_token.h",
         "x509v3.h",
+        #[cfg(feature = "fips")]
+        "x509.h",
     ];
     for header in &headers {
         builder = builder.header(include_path.join("openssl").join(header).to_str().unwrap());

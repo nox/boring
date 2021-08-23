@@ -4,6 +4,7 @@
     clippy::too_many_arguments,
     clippy::unreadable_literal,
     clippy::upper_case_acronyms,
+    deref_nullptr,
     improper_ctypes,
     non_camel_case_types,
     non_snake_case,

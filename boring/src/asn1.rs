@@ -272,6 +272,15 @@ impl Asn1Time {
             Ok(time)
         }
     }
+
+    /// Creates a new time from the specified asn1_string_st.
+    ///
+    /// This corresponds to [`ASN1_STRING_dup`].
+    ///
+    /// [`ASN1_STRING_dup`]: https://www.openssl.org/docs/manmaster/man3/ASN1_STRING_dup.html
+    pub fn from_string_st(s: *const ffi::asn1_string_st) -> Result<Asn1Time, ErrorStack> {
+        unsafe { Ok(Asn1Time::from_ptr(cvt_p(ffi::ASN1_STRING_dup(s))?)) }
+    }
 }
 
 impl PartialEq for Asn1Time {
@@ -313,6 +322,12 @@ impl PartialOrd<Asn1TimeRef> for Asn1Time {
 impl<'a> PartialOrd<&'a Asn1TimeRef> for Asn1Time {
     fn partial_cmp(&self, other: &&'a Asn1TimeRef) -> Option<Ordering> {
         self.compare(other).ok()
+    }
+}
+
+impl fmt::Debug for Asn1Time {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str(&self.to_string())
     }
 }
 
@@ -583,6 +598,23 @@ mod tests {
     fn time_from_unix() {
         let t = Asn1Time::from_unix(0).unwrap();
         assert_eq!("Jan  1 00:00:00 1970 GMT", t.to_string());
+    }
+
+    #[test]
+    fn time_from_string_st() {
+        let t1 = Asn1Time::from_unix(0).unwrap();
+        assert_eq!("Jan  1 00:00:00 1970 GMT", t1.to_string());
+
+        let t2 = Asn1Time::from_string_st(t1.as_ptr()).unwrap();
+        assert_eq!(t1, t2);
+
+        let s = CString::new("99990825235959Z").unwrap();
+        unsafe {
+            ffi::ASN1_TIME_set_string(t2.as_ptr(), s.as_ptr());
+        }
+
+        assert_eq!("Jan  1 00:00:00 1970 GMT", t1.to_string());
+        assert_eq!("Aug 25 23:59:59 9999 GMT", t2.to_string());
     }
 
     #[test]

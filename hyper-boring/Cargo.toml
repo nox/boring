@@ -12,8 +12,8 @@ exclude = ["test/*"]
 
 [features]
 default = ["runtime"]
-
 runtime = ["hyper/runtime"]
+fips = ["boring-sys/fips"]
 
 [dependencies]
 antidote = "1.0.0"

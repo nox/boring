@@ -11,6 +11,9 @@ description = """
 An implementation of SSL streams for Tokio backed by BoringSSL
 """
 
+[features]
+fips = ["boring-sys/fips"]
+
 [dependencies]
 boring = { version = "1.1.0", path = "../boring" }
 boring-sys = { version = "1.1.0", path = "../boring-sys" }
