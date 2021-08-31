@@ -1,6 +1,13 @@
 // NOTE: this build script is adopted from quiche (https://github.com/cloudflare/quiche)
+use std::io;
 use std::path::PathBuf;
 use std::process::Command;
+
+#[cfg(not(feature = "fips"))]
+const BORING_SSL_DIR: &str = "deps/boringssl";
+
+#[cfg(feature = "fips")]
+const BORING_SSL_DIR: &str = "deps/boringssl-fips";
 
 // Additional parameters for Android build of BoringSSL.
 //
@@ -95,7 +102,7 @@ fn get_boringssl_cmake_config() -> cmake::Config {
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap();
     let pwd = std::env::current_dir().unwrap();
 
-    let mut boringssl_cmake = cmake::Config::new("deps/boringssl");
+    let mut boringssl_cmake = cmake::Config::new(BORING_SSL_DIR);
 
     // Add platform-specific parameters.
     match os.as_ref() {
@@ -162,9 +169,9 @@ fn get_boringssl_cmake_config() -> cmake::Config {
             // Configure BoringSSL for building on 32-bit non-windows platforms.
             if arch == "x86" && os != "windows" {
                 let toolchain_file = if cfg!(feature = "fips") {
-                    "deps/boringssl/util/32-bit-toolchain.cmake"
+                    format!("{}/util/32-bit-toolchain.cmake", BORING_SSL_DIR)
                 } else {
-                    "deps/boringssl/src/util/32-bit-toolchain.cmake"
+                    format!("{}/src/util/32-bit-toolchain.cmake", BORING_SSL_DIR)
                 };
 
                 boringssl_cmake
@@ -176,13 +183,28 @@ fn get_boringssl_cmake_config() -> cmake::Config {
     }
 }
 
-fn boring_ssl_path() -> PathBuf {
-    std::fs::canonicalize(concat!(env!("CARGO_MANIFEST_DIR"), "/deps/boringssl/")).unwrap()
+fn run_command(command: &mut Command) -> io::Result<()> {
+    let exit_status = command.spawn()?.wait()?;
+
+    if !exit_status.success() {
+        let err = match exit_status.code() {
+            Some(code) => format!("{:?} exited with status: {}", command, code),
+            None => format!("{:?} was terminated by signal", command),
+        };
+
+        return Err(io::Error::new(io::ErrorKind::Other, err));
+    }
+
+    Ok(())
 }
 
-fn ensure_rpk_patch_applied() {
-    if std::fs::metadata("deps/boringssl/.has_rpk_patch").is_ok() {
-        return;
+fn boring_ssl_path() -> PathBuf {
+    std::fs::canonicalize(format!("{}/{}", env!("CARGO_MANIFEST_DIR"), BORING_SSL_DIR)).unwrap()
+}
+
+fn ensure_rpk_patch_applied() -> io::Result<()> {
+    if std::fs::metadata(format!("{}/.has_rpk_patch", BORING_SSL_DIR)).is_ok() {
+        return Ok(());
     }
 
     let src_path =
@@ -194,44 +216,20 @@ fn ensure_rpk_patch_applied() {
     ))
     .unwrap();
 
-    Command::new(cmd_path)
-        .current_dir(src_path)
-        .spawn()
-        .expect("failed to apply RPK patch");
+    let mut cmd = Command::new(cmd_path);
+    cmd.current_dir(src_path);
+    run_command(&mut cmd)?;
 
-    std::fs::write("deps/boringssl/.has_rpk_patch", b"").unwrap();
+    std::fs::write(format!("{}/.has_rpk_patch", BORING_SSL_DIR), b"").unwrap();
+
+    Ok(())
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     use std::env;
 
-    const FIPS_COMMIT: &str = "ae223d6138807a13006342edfeef32e813246b39";
-    const BORING_SSL_COMMIT: &str = "067cfd92f4d7da0edfa073b096d090b98a83b860";
-
-    let revision = if cfg!(feature = "fips") {
-        FIPS_COMMIT
-    } else {
-        BORING_SSL_COMMIT
-    };
-
-    Command::new("git")
-        .args(&["reset", "--hard", revision])
-        .current_dir(boring_ssl_path())
-        .spawn()
-        .expect("failed to checkout commit")
-        .wait()
-        .expect("failed to checkout commit");
-
-    Command::new("git")
-        .args(&["clean", "-f", "-d"])
-        .current_dir(boring_ssl_path())
-        .spawn()
-        .expect("failed to git clean")
-        .wait()
-        .expect("failed to git clean");
-
     if !cfg!(feature = "fips") {
-        ensure_rpk_patch_applied();
+        ensure_rpk_patch_applied()?;
     }
 
     let mut cfg = get_boringssl_cmake_config();
@@ -264,9 +262,9 @@ fn main() {
     }
 
     let include_path = if cfg!(feature = "fips") {
-        PathBuf::from("deps/boringssl/include")
+        PathBuf::from(format!("{}/include", BORING_SSL_DIR))
     } else {
-        PathBuf::from("deps/boringssl/src/include")
+        PathBuf::from(format!("{}/src/include", BORING_SSL_DIR))
     };
 
     let mut builder = bindgen::Builder::default()
@@ -328,4 +326,6 @@ fn main() {
     bindings
         .write_to_file(out_path.join("bindings.rs"))
         .expect("Couldn't write bindings!");
+
+    Ok(())
 }

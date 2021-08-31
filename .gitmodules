@@ -2,3 +2,6 @@
 	path = boring-sys/deps/boringssl
 	url = ssh://git@stash.cfops.it:7999/sys/boringssl.git
 	ignore = dirty
+[submodule "boring-sys/deps/boringssl-fips"]
+	path = boring-sys/deps/boringssl-fips
+	url = ssh://git@stash.cfops.it:7999/sys/boringssl.git
