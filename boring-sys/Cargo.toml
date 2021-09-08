@@ -32,3 +32,4 @@ fips = []
 [build-dependencies]
 bindgen = "0.57"
 cmake = "0.1"
+libc = "0.2"

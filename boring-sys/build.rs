@@ -1,5 +1,7 @@
 // NOTE: this build script is adopted from quiche (https://github.com/cloudflare/quiche)
+use std::fs::File;
 use std::io;
+use std::os::unix::io::AsRawFd;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -203,7 +205,18 @@ fn boring_ssl_path() -> PathBuf {
 }
 
 fn ensure_rpk_patch_applied() -> io::Result<()> {
-    if std::fs::metadata(format!("{}/.has_rpk_patch", BORING_SSL_DIR)).is_ok() {
+    use libc::{flock, LOCK_EX, LOCK_NB};
+
+    let lock_file = format!("{}/.has_rpk_patch", BORING_SSL_DIR);
+    if std::fs::metadata(&lock_file).is_ok() {
+        return Ok(());
+    }
+
+    let f = File::create(&lock_file).unwrap();
+    let status = unsafe { flock(f.as_raw_fd(), LOCK_EX | LOCK_NB) };
+
+    // Don't apply the patch if another process is already applying the patch:
+    if status != 0 && io::Error::last_os_error().kind() == io::ErrorKind::WouldBlock {
         return Ok(());
     }
 
@@ -219,8 +232,6 @@ fn ensure_rpk_patch_applied() -> io::Result<()> {
     let mut cmd = Command::new(cmd_path);
     cmd.current_dir(src_path);
     run_command(&mut cmd)?;
-
-    std::fs::write(format!("{}/.has_rpk_patch", BORING_SSL_DIR), b"").unwrap();
 
     Ok(())
 }
