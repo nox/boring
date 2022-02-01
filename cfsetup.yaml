@@ -29,6 +29,9 @@ all: &all
       <<: *builddeps_internal
     pre-cache:
       - export OPENSSL_DIR=/usr/include/openssl
+      - echo 'deb https://apt.cfdata.org/v2/any stable common cloudflare' >> /etc/apt/sources.list.d/cloudflare.list
+      - echo 'deb https://apt.cfdata.org/v2/stretch stable common cloudflare' >> /etc/apt/sources.list.d/cloudflare.list
+      - curl -o - https://apt.cfdata.org/public.gpg | apt-key add -
     post-cache:
       - echo "replace me"
       - false
@@ -76,7 +79,7 @@ all: &all
       - echo 'deb https://apt.cfdata.org/v2/any stable common cloudflare' >> /etc/apt/sources.list.d/cloudflare.list
       - echo 'deb https://apt.cfdata.org/v2/stretch stable common cloudflare' >> /etc/apt/sources.list.d/cloudflare.list
       - curl -o - https://apt.cfdata.org/public.gpg | apt-key add -
-      - apt-get update && apt-get install -y rust cargo-deb cargo-to-teamcity
+      - apt-get update && apt-get install -y rust cargo-deb cargo-to-teamcity cmake
 
 buster: *all
 default-flavor: buster
