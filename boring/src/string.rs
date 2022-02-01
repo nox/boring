@@ -1,4 +1,4 @@
-use ffi;
+use crate::ffi;
 use foreign_types::ForeignTypeRef;
 use libc::{c_char, c_void};
 use std::convert::AsRef;
@@ -7,14 +7,13 @@ use std::fmt;
 use std::ops::Deref;
 use std::str;
 
-use stack::Stackable;
+use crate::stack::Stackable;
 
 foreign_type_and_impl_send_sync! {
     type CType = c_char;
     fn drop = free;
 
     pub struct OpensslString;
-    pub struct OpensslStringRef;
 }
 
 impl fmt::Display for OpensslString {
@@ -81,5 +80,5 @@ impl fmt::Debug for OpensslStringRef {
 }
 
 unsafe fn free(buf: *mut c_char) {
-    ::ffi::OPENSSL_free(buf as *mut c_void);
+    crate::ffi::OPENSSL_free(buf as *mut c_void);
 }

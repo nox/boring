@@ -16,7 +16,11 @@ use std::convert::TryInto;
 use std::ffi::c_void;
 use std::os::raw::{c_char, c_int, c_uint, c_ulong};
 
-include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+#[allow(deref_nullptr)] // TODO: remove this when https://github.com/rust-lang/rust-bindgen/issues/1651 finally gets fixed
+mod generated {
+    include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+}
+pub use generated::*;
 
 #[cfg(target_pointer_width = "64")]
 pub type BN_ULONG = u64;
@@ -60,14 +64,6 @@ const_fn! {
         (l & 0xFFF) as c_int
     }
 }
-
-// FIXME remove
-pub type PasswordCallback = unsafe extern "C" fn(
-    buf: *mut c_char,
-    size: c_int,
-    rwflag: c_int,
-    user_data: *mut c_void,
-) -> c_int;
 
 pub fn init() {
     use std::ptr;

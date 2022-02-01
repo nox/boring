@@ -1,6 +1,7 @@
 #![allow(unused_imports)]
 
 use hex;
+use std::cell::Cell;
 use std::env;
 use std::fs::File;
 use std::io::prelude::*;
@@ -14,25 +15,24 @@ use std::process::{Child, ChildStdin, Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::Duration;
-use tempdir::TempDir;
 
-use dh::Dh;
-use error::ErrorStack;
-use hash::MessageDigest;
-use pkey::PKey;
-use srtp::SrtpProfileId;
-use ssl;
-use ssl::test::server::Server;
-use ssl::SslVersion;
-use ssl::{
+use crate::dh::Dh;
+use crate::error::ErrorStack;
+use crate::hash::MessageDigest;
+use crate::pkey::PKey;
+use crate::srtp::SrtpProfileId;
+use crate::ssl;
+use crate::ssl::test::server::Server;
+use crate::ssl::SslVersion;
+use crate::ssl::{
     Error, ExtensionType, HandshakeError, MidHandshakeSslStream, ShutdownResult, ShutdownState,
     Ssl, SslAcceptor, SslAcceptorBuilder, SslConnector, SslContext, SslContextBuilder, SslFiletype,
     SslMethod, SslOptions, SslSessionCacheMode, SslStream, SslStreamBuilder, SslVerifyMode,
     StatusType,
 };
-use x509::store::X509StoreBuilder;
-use x509::verify::X509CheckFlags;
-use x509::{X509Name, X509StoreContext, X509VerifyResult, X509};
+use crate::x509::store::X509StoreBuilder;
+use crate::x509::verify::X509CheckFlags;
+use crate::x509::{X509Name, X509StoreContext, X509VerifyResult, X509};
 
 mod server;
 
@@ -509,14 +509,16 @@ fn test_select_cert_error() {
 #[test]
 fn test_select_cert_unknown_extension() {
     let mut server = Server::builder();
-    let unknown_extension = std::sync::Arc::new(std::sync::Mutex::new(None));
+    let unknown_extension = std::sync::Arc::new(std::sync::Mutex::new(Some(vec![])));
 
     server.ctx().set_select_certificate_callback({
         let unknown = unknown_extension.clone();
         move |client_hello| {
-            *unknown.lock().unwrap() = client_hello
-                .get_extension(ExtensionType::QUIC_TRANSPORT_PARAMETERS_LEGACY)
+            let ext = client_hello
+                .get_extension(ExtensionType::SERVER_NAME)
                 .map(ToOwned::to_owned);
+            assert!(ext.is_none());
+            *unknown.lock().unwrap() = ext;
             Ok(())
         }
     });
@@ -1074,7 +1076,7 @@ fn psk_ciphers() {
     client
         .ctx()
         .set_psk_client_callback(move |_, _, identity, psk| {
-            identity[..CLIENT_IDENT.len()].copy_from_slice(&CLIENT_IDENT);
+            identity[..CLIENT_IDENT.len()].copy_from_slice(CLIENT_IDENT);
             identity[CLIENT_IDENT.len()] = 0;
             psk[..PSK.len()].copy_from_slice(PSK);
             CLIENT_CALLED.store(true, Ordering::SeqCst);

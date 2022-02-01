@@ -7,7 +7,7 @@
 //! Internet protocols, including SSL/TLS, which is the basis for HTTPS,
 //! the secure protocol for browsing the web.
 
-use ffi;
+use crate::ffi;
 use foreign_types::{ForeignType, ForeignTypeRef};
 use libc::{c_int, c_long};
 use std::convert::TryInto;
@@ -21,21 +21,21 @@ use std::ptr;
 use std::slice;
 use std::str;
 
-use asn1::{Asn1BitStringRef, Asn1IntegerRef, Asn1ObjectRef, Asn1StringRef, Asn1TimeRef};
-use bio::MemBioSlice;
-use conf::ConfRef;
-use error::ErrorStack;
-use ex_data::Index;
-use hash::{DigestBytes, MessageDigest};
-use nid::Nid;
-use pkey::{HasPrivate, HasPublic, PKey, PKeyRef, Public};
-use ssl::SslRef;
-use stack::{Stack, StackRef, Stackable};
-use string::OpensslString;
-use {cvt, cvt_n, cvt_p};
+use crate::asn1::{Asn1BitStringRef, Asn1IntegerRef, Asn1ObjectRef, Asn1StringRef, Asn1TimeRef};
+use crate::bio::MemBioSlice;
+use crate::conf::ConfRef;
+use crate::error::ErrorStack;
+use crate::ex_data::Index;
+use crate::hash::{DigestBytes, MessageDigest};
+use crate::nid::Nid;
+use crate::pkey::{HasPrivate, HasPublic, PKey, PKeyRef, Public};
+use crate::ssl::SslRef;
+use crate::stack::{Stack, StackRef, Stackable};
+use crate::string::OpensslString;
+use crate::{cvt, cvt_n, cvt_p};
 
 #[cfg(feature = "fips")]
-use asn1::Asn1Time;
+use crate::asn1::Asn1Time;
 
 pub mod extension;
 pub mod store;
@@ -50,9 +50,6 @@ foreign_type_and_impl_send_sync! {
 
     /// An `X509` certificate store context.
     pub struct X509StoreContext;
-
-    /// Reference to `X509StoreContext`.
-    pub struct X509StoreContextRef;
 }
 
 impl X509StoreContext {
@@ -70,7 +67,7 @@ impl X509StoreContext {
     pub fn new() -> Result<X509StoreContext, ErrorStack> {
         unsafe {
             ffi::init();
-            cvt_p(ffi::X509_STORE_CTX_new()).map(X509StoreContext)
+            cvt_p(ffi::X509_STORE_CTX_new()).map(|p| X509StoreContext::from_ptr(p))
         }
     }
 }
@@ -248,31 +245,19 @@ impl X509Builder {
     pub fn new() -> Result<X509Builder, ErrorStack> {
         unsafe {
             ffi::init();
-            cvt_p(ffi::X509_new()).map(|p| X509Builder(X509(p)))
+            cvt_p(ffi::X509_new()).map(|p| X509Builder(X509::from_ptr(p)))
         }
     }
 
-    #[cfg(not(feature = "fips"))]
     /// Sets the notAfter constraint on the certificate.
     pub fn set_not_after(&mut self, not_after: &Asn1TimeRef) -> Result<(), ErrorStack> {
-        unsafe { cvt(X509_set1_notAfter(self.0.as_ptr(), not_after.as_ptr())).map(|_| ()) }
-    }
-
-    #[cfg(feature = "fips")]
-    /// Sets the notAfter constraint on the certificate.
-    pub fn set_not_after(&mut self, not_after: &Asn1TimeRef) -> Result<(), ErrorStack> {
+        // TODO: once FIPS supports `set1_notAfter`, use that instead
         unsafe { cvt(X509_set_notAfter(self.0.as_ptr(), not_after.as_ptr())).map(|_| ()) }
     }
 
-    #[cfg(not(feature = "fips"))]
     /// Sets the notBefore constraint on the certificate.
     pub fn set_not_before(&mut self, not_before: &Asn1TimeRef) -> Result<(), ErrorStack> {
-        unsafe { cvt(X509_set1_notBefore(self.0.as_ptr(), not_before.as_ptr())).map(|_| ()) }
-    }
-
-    #[cfg(feature = "fips")]
-    /// Sets the notBefore constraint on the certificate.
-    pub fn set_not_before(&mut self, not_before: &Asn1TimeRef) -> Result<(), ErrorStack> {
+        // TODO: once FIPS supports `set1_notBefore`, use that instead
         unsafe { cvt(X509_set_notBefore(self.0.as_ptr(), not_before.as_ptr())).map(|_| ()) }
     }
 
@@ -415,8 +400,6 @@ foreign_type_and_impl_send_sync! {
 
     /// An `X509` public key certificate.
     pub struct X509;
-    /// Reference to `X509`.
-    pub struct X509Ref;
 }
 
 impl X509Ref {
@@ -535,9 +518,9 @@ impl X509Ref {
     /// Returns the certificate's Not After validity period.
     pub fn not_after(&self) -> &Asn1TimeRef {
         unsafe {
-            let date = X509_getm_notAfter(self.as_ptr());
+            let date = X509_get0_notAfter(self.as_ptr());
             assert!(!date.is_null());
-            Asn1TimeRef::from_ptr(date)
+            Asn1TimeRef::from_ptr(date as *mut _)
         }
     }
 
@@ -555,9 +538,9 @@ impl X509Ref {
     /// Returns the certificate's Not Before validity period.
     pub fn not_before(&self) -> &Asn1TimeRef {
         unsafe {
-            let date = X509_getm_notBefore(self.as_ptr());
+            let date = X509_get0_notBefore(self.as_ptr());
             assert!(!date.is_null());
-            Asn1TimeRef::from_ptr(date)
+            Asn1TimeRef::from_ptr(date as *mut _)
         }
     }
 
@@ -722,7 +705,7 @@ impl X509 {
 
                     return Err(ErrorStack::get());
                 } else {
-                    certs.push(X509(r));
+                    certs.push(X509::from_ptr(r));
                 }
             }
 
@@ -791,8 +774,6 @@ foreign_type_and_impl_send_sync! {
 
     /// Permit additional fields to be added to an `X509` v3 certificate.
     pub struct X509Extension;
-    /// Reference to `X509Extension`.
-    pub struct X509ExtensionRef;
 }
 
 impl Stackable for X509Extension {
@@ -822,7 +803,8 @@ impl X509Extension {
             let name = name.as_ptr() as *mut _;
             let value = value.as_ptr() as *mut _;
 
-            cvt_p(ffi::X509V3_EXT_nconf(conf, context, name, value)).map(X509Extension)
+            cvt_p(ffi::X509V3_EXT_nconf(conf, context, name, value))
+                .map(|p| X509Extension::from_ptr(p))
         }
     }
 
@@ -847,7 +829,8 @@ impl X509Extension {
             let name = name.as_raw();
             let value = value.as_ptr() as *mut _;
 
-            cvt_p(ffi::X509V3_EXT_nconf_nid(conf, context, name, value)).map(X509Extension)
+            cvt_p(ffi::X509V3_EXT_nconf_nid(conf, context, name, value))
+                .map(|p| X509Extension::from_ptr(p))
         }
     }
 }
@@ -860,7 +843,7 @@ impl X509NameBuilder {
     pub fn new() -> Result<X509NameBuilder, ErrorStack> {
         unsafe {
             ffi::init();
-            cvt_p(ffi::X509_NAME_new()).map(|p| X509NameBuilder(X509Name(p)))
+            cvt_p(ffi::X509_NAME_new()).map(|p| X509NameBuilder(X509Name::from_ptr(p)))
         }
     }
 
@@ -919,8 +902,6 @@ foreign_type_and_impl_send_sync! {
 
     /// The names of an `X509` certificate.
     pub struct X509Name;
-    /// Reference to `X509Name`.
-    pub struct X509NameRef;
 }
 
 impl X509Name {
@@ -1012,8 +993,6 @@ foreign_type_and_impl_send_sync! {
 
     /// A name entry associated with a `X509Name`.
     pub struct X509NameEntry;
-    /// Reference to `X509NameEntry`.
-    pub struct X509NameEntryRef;
 }
 
 impl X509NameEntryRef {
@@ -1061,7 +1040,7 @@ impl X509ReqBuilder {
     pub fn new() -> Result<X509ReqBuilder, ErrorStack> {
         unsafe {
             ffi::init();
-            cvt_p(ffi::X509_REQ_new()).map(|p| X509ReqBuilder(X509Req(p)))
+            cvt_p(ffi::X509_REQ_new()).map(|p| X509ReqBuilder(X509Req::from_ptr(p)))
         }
     }
 
@@ -1170,8 +1149,6 @@ foreign_type_and_impl_send_sync! {
 
     /// An `X509` certificate request.
     pub struct X509Req;
-    /// Reference to `X509Req`.
-    pub struct X509ReqRef;
 }
 
 impl X509Req {
@@ -1356,8 +1333,6 @@ foreign_type_and_impl_send_sync! {
 
     /// An `X509` certificate alternative names.
     pub struct GeneralName;
-    /// Reference to `GeneralName`.
-    pub struct GeneralNameRef;
 }
 
 impl GeneralNameRef {
@@ -1435,8 +1410,6 @@ foreign_type_and_impl_send_sync! {
 
     /// An `X509` certificate signature algorithm.
     pub struct X509Algorithm;
-    /// Reference to `X509Algorithm`.
-    pub struct X509AlgorithmRef;
 }
 
 impl X509AlgorithmRef {
@@ -1457,8 +1430,6 @@ foreign_type_and_impl_send_sync! {
 
     /// An `X509` or an X509 certificate revocation list.
     pub struct X509Object;
-    /// Reference to `X509Object`
-    pub struct X509ObjectRef;
 }
 
 impl X509ObjectRef {
@@ -1478,21 +1449,14 @@ impl Stackable for X509Object {
     type StackType = ffi::stack_st_X509_OBJECT;
 }
 
-use ffi::X509_OBJECT_get0_X509;
-use ffi::{ASN1_STRING_get0_data, X509_ALGOR_get0};
-use ffi::{X509_get0_signature, X509_up_ref};
+use crate::ffi::{X509_get0_notAfter, X509_get0_notBefore, X509_get0_signature, X509_up_ref};
 
-#[cfg(not(feature = "fips"))]
-use ffi::{
-    X509_REQ_get_subject_name, X509_REQ_get_version, X509_STORE_CTX_get0_chain, X509_getm_notAfter,
-    X509_getm_notBefore, X509_set1_notAfter, X509_set1_notBefore,
-};
-
+use crate::ffi::X509_OBJECT_get0_X509;
 #[cfg(feature = "fips")]
-use ffi::{
-    X509_STORE_CTX_get1_chain, X509_get0_notAfter, X509_get0_notBefore, X509_set_notAfter,
-    X509_set_notBefore,
-};
+use crate::ffi::X509_STORE_CTX_get1_chain;
+use crate::ffi::{ASN1_STRING_get0_data, X509_ALGOR_get0, X509_set_notAfter, X509_set_notBefore};
+#[cfg(not(feature = "fips"))]
+use crate::ffi::{X509_REQ_get_subject_name, X509_REQ_get_version, X509_STORE_CTX_get0_chain};
 
 #[allow(bad_style)]
 unsafe fn X509_OBJECT_free(x: *mut ffi::X509_OBJECT) {

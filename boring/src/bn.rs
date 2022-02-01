@@ -22,7 +22,7 @@
 //! ```
 //!
 //! [`BIGNUM`]: https://wiki.openssl.org/index.php/Manual:Bn_internal(3)
-use ffi;
+use crate::ffi;
 use foreign_types::{ForeignType, ForeignTypeRef};
 use libc::{c_int, size_t};
 use std::cmp::Ordering;
@@ -30,11 +30,11 @@ use std::ffi::CString;
 use std::ops::{Add, Deref, Div, Mul, Neg, Rem, Shl, Shr, Sub};
 use std::{fmt, ptr};
 
-use asn1::Asn1Integer;
-use error::ErrorStack;
-use ffi::BN_is_negative;
-use string::OpensslString;
-use {cvt, cvt_n, cvt_p};
+use crate::asn1::Asn1Integer;
+use crate::error::ErrorStack;
+use crate::ffi::BN_is_negative;
+use crate::string::OpensslString;
+use crate::{cvt, cvt_n, cvt_p};
 
 /// Options for the most significant bits of a randomly generated `BigNum`.
 pub struct MsbOption(c_int);
@@ -65,10 +65,6 @@ foreign_type_and_impl_send_sync! {
     ///
     /// [`BN_CTX`]: https://www.openssl.org/docs/man1.1.0/crypto/BN_CTX_new.html
     pub struct BigNumContext;
-    /// Reference to [`BigNumContext`]
-    ///
-    /// [`BigNumContext`]: struct.BigNumContext.html
-    pub struct BigNumContextRef;
 }
 
 impl BigNumContext {
@@ -80,7 +76,7 @@ impl BigNumContext {
     pub fn new() -> Result<BigNumContext, ErrorStack> {
         unsafe {
             ffi::init();
-            cvt_p(ffi::BN_CTX_new()).map(BigNumContext)
+            cvt_p(ffi::BN_CTX_new()).map(|p| BigNumContext::from_ptr(p))
         }
     }
 }
@@ -113,10 +109,6 @@ foreign_type_and_impl_send_sync! {
     /// # fn main () { bignums(); }
     /// ```
     pub struct BigNum;
-    /// Reference to a [`BigNum`]
-    ///
-    /// [`BigNum`]: struct.BigNum.html
-    pub struct BigNumRef;
 }
 
 impl BigNumRef {
@@ -1231,7 +1223,7 @@ impl Neg for BigNum {
 
 #[cfg(test)]
 mod tests {
-    use bn::{BigNum, BigNumContext};
+    use crate::bn::{BigNum, BigNumContext};
 
     #[test]
     fn test_to_from_slice() {

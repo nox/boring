@@ -34,14 +34,14 @@
 //! let store: X509Store = builder.build();
 //! ```
 
-use ffi;
-use foreign_types::ForeignTypeRef;
+use crate::ffi;
+use foreign_types::{ForeignType, ForeignTypeRef};
 use std::mem;
 
-use error::ErrorStack;
-use stack::StackRef;
-use x509::{X509Object, X509};
-use {cvt, cvt_p};
+use crate::error::ErrorStack;
+use crate::stack::StackRef;
+use crate::x509::{X509Object, X509};
+use crate::{cvt, cvt_p};
 
 foreign_type_and_impl_send_sync! {
     type CType = ffi::X509_STORE;
@@ -49,8 +49,6 @@ foreign_type_and_impl_send_sync! {
 
     /// A builder type used to construct an `X509Store`.
     pub struct X509StoreBuilder;
-    /// Reference to an `X509StoreBuilder`.
-    pub struct X509StoreBuilderRef;
 }
 
 impl X509StoreBuilder {
@@ -61,7 +59,7 @@ impl X509StoreBuilder {
         unsafe {
             ffi::init();
 
-            cvt_p(ffi::X509_STORE_new()).map(X509StoreBuilder)
+            cvt_p(ffi::X509_STORE_new()).map(|p| X509StoreBuilder::from_ptr(p))
         }
     }
 
@@ -96,8 +94,6 @@ foreign_type_and_impl_send_sync! {
 
     /// A certificate store to hold trusted `X509` certificates.
     pub struct X509Store;
-    /// Reference to an `X509Store`.
-    pub struct X509StoreRef;
 }
 
 impl X509StoreRef {
@@ -107,4 +103,4 @@ impl X509StoreRef {
     }
 }
 
-use ffi::X509_STORE_get0_objects;
+use crate::ffi::X509_STORE_get0_objects;

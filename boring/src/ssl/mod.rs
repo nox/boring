@@ -57,7 +57,7 @@
 //!     }
 //! }
 //! ```
-use ffi;
+use crate::ffi;
 use foreign_types::{ForeignType, ForeignTypeRef, Opaque};
 use libc::{c_char, c_int, c_long, c_uchar, c_uint, c_void};
 use std::any::TypeId;
@@ -73,31 +73,31 @@ use std::mem::{self, ManuallyDrop};
 use std::ops::{Deref, DerefMut};
 use std::panic::resume_unwind;
 use std::path::Path;
-use std::ptr;
+use std::ptr::{self, NonNull};
 use std::slice;
 use std::str;
 use std::sync::{Arc, Mutex};
 
-use dh::DhRef;
-use ec::EcKeyRef;
-use error::ErrorStack;
-use ex_data::Index;
-use nid::Nid;
-use pkey::{HasPrivate, PKeyRef, Params, Private};
-use srtp::{SrtpProtectionProfile, SrtpProtectionProfileRef};
-use ssl::bio::BioMethod;
-use ssl::callbacks::*;
-use ssl::error::InnerError;
-use stack::{Stack, StackRef};
-use x509::store::{X509Store, X509StoreBuilderRef, X509StoreRef};
-use x509::verify::X509VerifyParamRef;
-use x509::{X509Name, X509Ref, X509StoreContextRef, X509VerifyResult, X509};
-use {cvt, cvt_0i, cvt_n, cvt_p, init};
+use crate::dh::DhRef;
+use crate::ec::EcKeyRef;
+use crate::error::ErrorStack;
+use crate::ex_data::Index;
+use crate::nid::Nid;
+use crate::pkey::{HasPrivate, PKeyRef, Params, Private};
+use crate::srtp::{SrtpProtectionProfile, SrtpProtectionProfileRef};
+use crate::ssl::bio::BioMethod;
+use crate::ssl::callbacks::*;
+use crate::ssl::error::InnerError;
+use crate::stack::{Stack, StackRef};
+use crate::x509::store::{X509Store, X509StoreBuilderRef, X509StoreRef};
+use crate::x509::verify::X509VerifyParamRef;
+use crate::x509::{X509Name, X509Ref, X509StoreContextRef, X509VerifyResult, X509};
+use crate::{cvt, cvt_0i, cvt_n, cvt_p, init};
 
-pub use ssl::connector::{
+pub use crate::ssl::connector::{
     ConnectConfiguration, SslAcceptor, SslAcceptorBuilder, SslConnector, SslConnectorBuilder,
 };
-pub use ssl::error::{Error, ErrorCode, HandshakeError};
+pub use crate::ssl::error::{Error, ErrorCode, HandshakeError};
 
 mod bio;
 mod callbacks;
@@ -1680,11 +1680,6 @@ foreign_type_and_impl_send_sync! {
     /// Applications commonly configure a single `SslContext` that is shared by all of its
     /// `SslStreams`.
     pub struct SslContext;
-
-    /// Reference to [`SslContext`]
-    ///
-    /// [`SslContext`]: struct.SslContext.html
-    pub struct SslContextRef;
 }
 
 impl Clone for SslContext {
@@ -1933,7 +1928,7 @@ impl ClientHello {
 /// Information about a cipher.
 pub struct SslCipher(*mut ffi::SSL_CIPHER);
 
-impl ForeignType for SslCipher {
+unsafe impl ForeignType for SslCipher {
     type CType = ffi::SSL_CIPHER;
     type Ref = SslCipherRef;
 
@@ -1967,7 +1962,7 @@ impl DerefMut for SslCipher {
 /// [`SslCipher`]: struct.SslCipher.html
 pub struct SslCipherRef(Opaque);
 
-impl ForeignTypeRef for SslCipherRef {
+unsafe impl ForeignTypeRef for SslCipherRef {
     type CType = ffi::SSL_CIPHER;
 }
 
@@ -2068,11 +2063,6 @@ foreign_type_and_impl_send_sync! {
     ///
     /// These can be cached to share sessions across connections.
     pub struct SslSession;
-
-    /// Reference to [`SslSession`].
-    ///
-    /// [`SslSession`]: struct.SslSession.html
-    pub struct SslSessionRef;
 }
 
 impl Clone for SslSession {
@@ -2101,7 +2091,7 @@ impl ToOwned for SslSessionRef {
     fn to_owned(&self) -> SslSession {
         unsafe {
             SSL_SESSION_up_ref(self.as_ptr());
-            SslSession(self.as_ptr())
+            SslSession(NonNull::new_unchecked(self.as_ptr()))
         }
     }
 }
@@ -2196,11 +2186,6 @@ foreign_type_and_impl_send_sync! {
     ///
     /// [`SslContext`]: struct.SslContext.html
     pub struct Ssl;
-
-    /// Reference to an [`Ssl`].
-    ///
-    /// [`Ssl`]: struct.Ssl.html
-    pub struct SslRef;
 }
 
 impl fmt::Debug for Ssl {
@@ -3526,9 +3511,11 @@ bitflags! {
     }
 }
 
-use ffi::{SSL_CTX_up_ref, SSL_SESSION_get_master_key, SSL_SESSION_up_ref, SSL_is_server};
+use crate::ffi::{SSL_CTX_up_ref, SSL_SESSION_get_master_key, SSL_SESSION_up_ref, SSL_is_server};
 
-use ffi::{DTLS_method, TLS_client_method, TLS_method, TLS_server_method, TLS_with_buffers_method};
+use crate::ffi::{
+    DTLS_method, TLS_client_method, TLS_method, TLS_server_method, TLS_with_buffers_method,
+};
 
 use std::sync::Once;
 

@@ -1,21 +1,18 @@
-use ffi;
+use crate::ffi;
+use crate::stack::Stackable;
 use foreign_types::ForeignTypeRef;
 use libc::c_ulong;
-use stack::Stackable;
 use std::ffi::CStr;
 use std::str;
 
 /// fake free method, since SRTP_PROTECTION_PROFILE is static
 unsafe fn free(_profile: *mut ffi::SRTP_PROTECTION_PROFILE) {}
 
-#[allow(unused_unsafe)]
 foreign_type_and_impl_send_sync! {
     type CType = ffi::SRTP_PROTECTION_PROFILE;
     fn drop = free;
 
     pub struct SrtpProtectionProfile;
-    /// Reference to `SrtpProtectionProfile`.
-    pub struct SrtpProtectionProfileRef;
 }
 
 impl Stackable for SrtpProtectionProfile {

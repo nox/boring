@@ -15,17 +15,17 @@
 //! [`EcGroup`]: struct.EcGroup.html
 //! [`Nid`]: ../nid/struct.Nid.html
 //! [Eliptic Curve Cryptography]: https://wiki.openssl.org/index.php/Elliptic_Curve_Cryptography
-use ffi;
+use crate::ffi;
 use foreign_types::{ForeignType, ForeignTypeRef};
 use libc::c_int;
 use std::fmt;
 use std::ptr;
 
-use bn::{BigNumContextRef, BigNumRef};
-use error::ErrorStack;
-use nid::Nid;
-use pkey::{HasParams, HasPrivate, HasPublic, Params, Private, Public};
-use {cvt, cvt_n, cvt_p, init};
+use crate::bn::{BigNumContextRef, BigNumRef};
+use crate::error::ErrorStack;
+use crate::nid::Nid;
+use crate::pkey::{HasParams, HasPrivate, HasPublic, Params, Private, Public};
+use crate::{cvt, cvt_n, cvt_p, init};
 
 /// Compressed or Uncompressed conversion
 ///
@@ -107,10 +107,6 @@ foreign_type_and_impl_send_sync! {
     /// [wiki]: https://wiki.openssl.org/index.php/Command_Line_Elliptic_Curve_Operations
     /// [`Nid`]: ../nid/index.html
     pub struct EcGroup;
-    /// Reference to [`EcGroup`]
-    ///
-    /// [`EcGroup`]: struct.EcGroup.html
-    pub struct EcGroupRef;
 }
 
 impl EcGroup {
@@ -122,7 +118,7 @@ impl EcGroup {
     pub fn from_curve_name(nid: Nid) -> Result<EcGroup, ErrorStack> {
         unsafe {
             init();
-            cvt_p(ffi::EC_GROUP_new_by_curve_name(nid.as_raw())).map(EcGroup)
+            cvt_p(ffi::EC_GROUP_new_by_curve_name(nid.as_raw())).map(|p| EcGroup::from_ptr(p))
         }
     }
 }
@@ -259,10 +255,6 @@ foreign_type_and_impl_send_sync! {
     ///
     /// [`EC_POINT_new`]: https://www.openssl.org/docs/man1.1.0/crypto/EC_POINT_new.html
     pub struct EcPoint;
-    /// Reference to [`EcPoint`]
-    ///
-    /// [`EcPoint`]: struct.EcPoint.html
-    pub struct EcPointRef;
 }
 
 impl EcPointRef {
@@ -421,7 +413,9 @@ impl EcPointRef {
     ///
     /// [`EC_POINT_dup`]: https://www.openssl.org/docs/man1.1.0/crypto/EC_POINT_dup.html
     pub fn to_owned(&self, group: &EcGroupRef) -> Result<EcPoint, ErrorStack> {
-        unsafe { cvt_p(ffi::EC_POINT_dup(self.as_ptr(), group.as_ptr())).map(EcPoint) }
+        unsafe {
+            cvt_p(ffi::EC_POINT_dup(self.as_ptr(), group.as_ptr())).map(|p| EcPoint::from_ptr(p))
+        }
     }
 
     /// Determines if this point is equal to another.
@@ -479,7 +473,7 @@ impl EcPoint {
     ///
     /// [`EC_POINT_new`]: https://www.openssl.org/docs/man1.1.0/crypto/EC_POINT_new.html
     pub fn new(group: &EcGroupRef) -> Result<EcPoint, ErrorStack> {
-        unsafe { cvt_p(ffi::EC_POINT_new(group.as_ptr())).map(EcPoint) }
+        unsafe { cvt_p(ffi::EC_POINT_new(group.as_ptr())).map(|p| EcPoint::from_ptr(p)) }
     }
 
     /// Creates point from a binary representation
@@ -869,8 +863,8 @@ mod test {
     use hex::FromHex;
 
     use super::*;
-    use bn::{BigNum, BigNumContext};
-    use nid::Nid;
+    use crate::bn::{BigNum, BigNumContext};
+    use crate::nid::Nid;
 
     #[test]
     fn key_new_by_curve_name() {

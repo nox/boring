@@ -65,7 +65,7 @@ fn mk_ca_cert() -> Result<(X509, PKey<Private>), ErrorStack> {
 /// Make a X509 request with the given private key
 fn mk_request(privkey: &PKey<Private>) -> Result<X509Req, ErrorStack> {
     let mut req_builder = X509ReqBuilder::new()?;
-    req_builder.set_pubkey(&privkey)?;
+    req_builder.set_pubkey(privkey)?;
 
     let mut x509_name = X509NameBuilder::new()?;
     x509_name.append_entry_by_text("C", "US")?;
@@ -75,12 +75,13 @@ fn mk_request(privkey: &PKey<Private>) -> Result<X509Req, ErrorStack> {
     let x509_name = x509_name.build();
     req_builder.set_subject_name(&x509_name)?;
 
-    req_builder.sign(&privkey, MessageDigest::sha256())?;
+    req_builder.sign(privkey, MessageDigest::sha256())?;
     let req = req_builder.build();
     Ok(req)
 }
 
 /// Make a certificate and private key signed by the given CA cert and private key
+#[cfg_attr(feature = "fips", allow(unreachable_code, unused_variables))]
 fn mk_ca_signed_cert(
     ca_cert: &X509Ref,
     ca_privkey: &PKeyRef<Private>,
@@ -98,7 +99,15 @@ fn mk_ca_signed_cert(
         serial.to_asn1_integer()?
     };
     cert_builder.set_serial_number(&serial_number)?;
+
+    #[cfg(not(feature = "fips"))]
     cert_builder.set_subject_name(req.subject_name())?;
+    #[cfg(feature = "fips")]
+    {
+        eprintln!("mk_certs not supported with FIPS module");
+        std::process::exit(1);
+    }
+
     cert_builder.set_issuer_name(ca_cert.subject_name())?;
     cert_builder.set_pubkey(&privkey)?;
     let not_before = Asn1Time::days_from_now(0)?;
@@ -133,7 +142,7 @@ fn mk_ca_signed_cert(
         .build(&cert_builder.x509v3_context(Some(ca_cert), None))?;
     cert_builder.append_extension(subject_alt_name)?;
 
-    cert_builder.sign(&ca_privkey, MessageDigest::sha256())?;
+    cert_builder.sign(ca_privkey, MessageDigest::sha256())?;
     let cert = cert_builder.build();
 
     Ok((cert, privkey))

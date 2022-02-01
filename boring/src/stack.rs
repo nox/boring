@@ -1,4 +1,4 @@
-use ffi;
+use crate::ffi;
 use foreign_types::{ForeignType, ForeignTypeRef, Opaque};
 use libc::size_t;
 use std::borrow::Borrow;
@@ -9,10 +9,10 @@ use std::marker::PhantomData;
 use std::mem;
 use std::ops::{Deref, DerefMut, Index, IndexMut, Range};
 
-use error::ErrorStack;
-use {cvt_0, cvt_p};
+use crate::error::ErrorStack;
+use crate::{cvt_0, cvt_p};
 
-use ffi::{
+use crate::ffi::{
     sk_free as OPENSSL_sk_free, sk_new_null as OPENSSL_sk_new_null, sk_num as OPENSSL_sk_num,
     sk_pop as OPENSSL_sk_pop, sk_push as OPENSSL_sk_push, sk_value as OPENSSL_sk_value,
     _STACK as OPENSSL_STACK,
@@ -89,7 +89,7 @@ impl<T: Stackable> Borrow<StackRef<T>> for Stack<T> {
     }
 }
 
-impl<T: Stackable> ForeignType for Stack<T> {
+unsafe impl<T: Stackable> ForeignType for Stack<T> {
     type CType = T::StackType;
     type Ref = StackRef<T>;
 
@@ -131,7 +131,7 @@ pub struct IntoIter<T: Stackable> {
 impl<T: Stackable> Drop for IntoIter<T> {
     fn drop(&mut self) {
         unsafe {
-            while let Some(_) = self.next() {}
+            for _ in &mut *self {}
             OPENSSL_sk_free(self.stack as *mut _);
         }
     }
@@ -170,7 +170,7 @@ pub struct StackRef<T: Stackable>(Opaque, PhantomData<T>);
 unsafe impl<T: Stackable + Send> Send for StackRef<T> {}
 unsafe impl<T: Stackable + Sync> Sync for StackRef<T> {}
 
-impl<T: Stackable> ForeignTypeRef for StackRef<T> {
+unsafe impl<T: Stackable> ForeignTypeRef for StackRef<T> {
     type CType = T::StackType;
 }
 

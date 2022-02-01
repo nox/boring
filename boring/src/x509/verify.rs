@@ -1,10 +1,10 @@
-use ffi;
+use crate::ffi;
 use foreign_types::ForeignTypeRef;
 use libc::c_uint;
 use std::net::IpAddr;
 
-use cvt;
-use error::ErrorStack;
+use crate::cvt;
+use crate::error::ErrorStack;
 
 bitflags! {
     /// Flags used to check an `X509` certificate.
@@ -27,8 +27,6 @@ foreign_type_and_impl_send_sync! {
 
     /// Adjust parameters associated with certificate verification.
     pub struct X509VerifyParam;
-    /// Reference to `X509VerifyParam`.
-    pub struct X509VerifyParamRef;
 }
 
 impl X509VerifyParamRef {

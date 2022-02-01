@@ -1,9 +1,10 @@
 //! Interface for processing OpenSSL configuration files.
-use ffi;
+use crate::ffi;
+use foreign_types::ForeignType;
 use libc::c_void;
 
-use cvt_p;
-use error::ErrorStack;
+use crate::cvt_p;
+use crate::error::ErrorStack;
 
 pub struct ConfMethod(*mut c_void);
 
@@ -28,12 +29,11 @@ foreign_type_and_impl_send_sync! {
     fn drop = ffi::NCONF_free;
 
     pub struct Conf;
-    pub struct ConfRef;
 }
 
 impl Conf {
     /// Create a configuration parser.
     pub fn new(method: ConfMethod) -> Result<Conf, ErrorStack> {
-        unsafe { cvt_p(ffi::NCONF_new(method.as_ptr())).map(Conf) }
+        unsafe { cvt_p(ffi::NCONF_new(method.as_ptr())).map(|p| Conf::from_ptr(p)) }
     }
 }
