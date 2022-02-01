@@ -34,6 +34,14 @@ is supported by this crate. Support is enabled by this crate's `fips` feature.
 $ cargo test --features fips fips::is_enabled
 ```
 
+## RPK support
+
+This is an internal cloudflare fork of the external https://github.com/cloudflare/boring repository.
+The changes aren't upstreamed because google's version of boringssl doesn't have RPK support
+("Raw Public Keys"; see https://datatracker.ietf.org/doc/html/rfc7250).
+
+Note that RPK support and FIPS support are mutually incompatible.
+
 ## Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally
