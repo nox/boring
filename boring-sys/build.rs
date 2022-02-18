@@ -274,10 +274,11 @@ fn verify_fips_clang_version() -> (&'static str, &'static str) {
             );
             return (cc, cxx);
         } else if cc == "cc" {
-            panic!(
-                "unsupported clang version \"{}\": FIPS requires clang {}",
+            eprintln!(
+                "warning: unsupported clang version \"{}\": FIPS requires clang {}",
                 cc_version, REQUIRED_CLANG_VERSION
             );
+            return (cc, cxx);
         } else if !cc_version.is_empty() {
             eprintln!(
                 "warning: FIPS requires clang version {}, skipping incompatible version \"{}\"",
