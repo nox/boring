@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 // NOTE: this build script is adopted from quiche (https://github.com/cloudflare/quiche)
-use std::fs::File;
+use std::fs::{self, File};
 use std::io;
 use std::os::unix::io::AsRawFd;
 
@@ -93,7 +93,9 @@ fn get_boringssl_platform_output_path() -> String {
 
 #[cfg(feature = "fips")]
 const BORING_SSL_PATH: &str = "deps/boringssl-fips";
-#[cfg(not(feature = "fips"))]
+#[cfg(feature = "frankenfips")]
+const BORING_SSL_PATH: &str = "deps/boringssl-frankenfips";
+#[cfg(not(any(feature = "fips", feature = "frankenfips")))]
 const BORING_SSL_PATH: &str = "deps/boringssl";
 
 /// Returns a new cmake::Config for building BoringSSL.
@@ -292,7 +294,7 @@ fn verify_fips_clang_version() -> (&'static str, &'static str) {
 fn main() -> io::Result<()> {
     use std::env;
 
-    if !cfg!(feature = "fips") {
+    if !cfg!(any(feature = "fips", feature = "frankenfips")) {
         ensure_rpk_patch_applied()?;
     }
 
@@ -329,11 +331,19 @@ fn main() -> io::Result<()> {
             cfg.define("FIPS", "1");
         }
 
-        cfg.build_target("bssl").build().display().to_string()
+        // no need to use the specific toolchain as for the fips build.
+        // only the pre-built bcm.o is relevant for FIPS certification
+        // and that is pre-built with the right toolchain (see README for link).
+        if cfg!(feature = "frankenfips") {
+            cfg.define("FIPS", "1");
+        }
+
+        cfg.build_target("ssl").build();
+        cfg.build_target("crypto").build().display().to_string()
     });
 
     let build_path = get_boringssl_platform_output_path();
-    if cfg!(feature = "fips") {
+    if cfg!(any(feature = "fips", feature = "frankenfips")) {
         println!(
             "cargo:rustc-link-search=native={}/build/crypto/{}",
             bssl_dir, build_path
@@ -349,6 +359,18 @@ fn main() -> io::Result<()> {
         );
     }
 
+    // patch <bssl_dir>/libcrypto.a with fips-certified bcm.o
+    if cfg!(feature = "frankenfips") {
+        let libcrypto_path = format!("{bssl_dir}/libcrypto.a");
+        let bcm_o_path = "/opt/boringssl-fips/lib/bcm.o";
+        let bcm_o_new_path = format!("{bssl_dir}/build/bcm-fips.o");
+        fs::copy(bcm_o_path, &bcm_o_new_path).unwrap();
+        // insert fips bcm.o before bcm.c.o into libcrypto.a,
+        // so for all duplicate symbols the older bcm.o is used
+        run_command(Command::new("ar").args(["rb", "bcm.c.o", &libcrypto_path, &bcm_o_new_path]))
+            .expect("failed to run ar command");
+    }
+
     println!("cargo:rustc-link-lib=static=crypto");
     println!("cargo:rustc-link-lib=static=ssl");
 
@@ -359,7 +381,7 @@ fn main() -> io::Result<()> {
 
     println!("cargo:rerun-if-env-changed=BORING_BSSL_INCLUDE_PATH");
     let include_path = std::env::var("BORING_BSSL_INCLUDE_PATH").unwrap_or_else(|_| {
-        if cfg!(feature = "fips") {
+        if cfg!(any(feature = "fips", feature = "frankenfips")) {
             format!("{}/include", BORING_SSL_PATH)
         } else {
             format!("{}/src/include", BORING_SSL_PATH)

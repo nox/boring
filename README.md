@@ -34,6 +34,27 @@ is supported by this crate. Support is enabled by this crate's `fips` feature.
 $ cargo test --features fips fips::is_enabled
 ```
 
+## FIPS Frankenbuild
+
+In order to have access to newer boringssl features while keeping FIPS compliancy,
+there is the option to do a frankenbuild that links in the FIPS module (bcm.o) from the certified commit
+against a newer build of boringssl.
+
+Use the `frankenfips` feature to enable this and follow the below instructions to build a consuming lib/bin:
+
+1. Install prebuilt FIPS-certified module (`apt-get install libbssl-fips-dev`, 
+   see https://wiki.cfops.it/display/FEDRAMP/libbssl-fips+Implementation+Guide for background info)
+2. Add this to the consumer's Cargo.toml:
+```
+[target.'cfg(feature = "frankenfips")']
+rustflags = ["-C", "link-args=-Wl,-zmuldefs"]
+```
+
+(The libcrypto.a contains two versions of bcm.o files, we need to instruct ld to not error on multiple definitions.
+Normally when a symbol is defined multiple times, the linker will report a fatal error.
+Using "-z muldefs" ld allows multiple definitions and the first definition will be used.)
+
+
 ## RPK support
 
 This is an internal cloudflare fork of the external https://github.com/cloudflare/boring repository.
@@ -41,6 +62,7 @@ The changes aren't upstreamed because google's version of boringssl doesn't have
 ("Raw Public Keys"; see https://datatracker.ietf.org/doc/html/rfc7250).
 
 Note that RPK support and FIPS support are mutually incompatible.
+
 
 ## Contribution
 

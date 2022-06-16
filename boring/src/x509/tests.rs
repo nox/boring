@@ -41,10 +41,14 @@ fn test_debug() {
     assert!(debugged.contains(r#"signature_algorithm: sha256WithRSAEncryption"#));
     assert!(debugged.contains(r#"countryName = "AU""#));
     assert!(debugged.contains(r#"stateOrProvinceName = "Some-State""#));
-    assert!(debugged.contains(r#"not_before: Aug 14 17:00:03 2016 GMT"#));
-    assert!(debugged.contains(r#"not_after: Aug 12 17:00:03 2026 GMT"#));
+    #[cfg(not(any(feature = "fips", feature = "frankenfips")))]
+    {
+        assert!(debugged.contains(r#"not_before: Aug 14 17:00:03 2016 GMT"#));
+        assert!(debugged.contains(r#"not_after: Aug 12 17:00:03 2026 GMT"#));
+    }
 }
 
+#[cfg(not(any(feature = "fips", feature = "frankenfips")))]
 #[test]
 fn test_cert_issue_validity() {
     let cert = include_bytes!("../../test/cert.pem");

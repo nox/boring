@@ -34,7 +34,7 @@ use crate::stack::{Stack, StackRef, Stackable};
 use crate::string::OpensslString;
 use crate::{cvt, cvt_n, cvt_p};
 
-#[cfg(feature = "fips")]
+#[cfg(any(feature = "fips", feature = "frankenfips"))]
 use crate::asn1::Asn1Time;
 
 pub mod extension;
@@ -200,7 +200,7 @@ impl X509StoreContextRef {
         unsafe { ffi::X509_STORE_CTX_get_error_depth(self.as_ptr()) as u32 }
     }
 
-    #[cfg(not(feature = "fips"))]
+    #[cfg(not(any(feature = "fips", feature = "frankenfips")))]
     /// Returns a reference to a complete valid `X509` certificate chain.
     ///
     /// This corresponds to [`X509_STORE_CTX_get0_chain`].
@@ -218,7 +218,7 @@ impl X509StoreContextRef {
         }
     }
 
-    #[cfg(feature = "fips")]
+    #[cfg(any(feature = "fips", feature = "frankenfips"))]
     /// Returns a reference to a complete valid `X509` certificate chain.
     ///
     /// This corresponds to [`X509_STORE_CTX_get1_chain`].
@@ -514,7 +514,7 @@ impl X509Ref {
         self.digest(hash_type).map(|b| b.to_vec())
     }
 
-    #[cfg(not(feature = "fips"))]
+    #[cfg(not(any(feature = "fips", feature = "frankenfips")))]
     /// Returns the certificate's Not After validity period.
     pub fn not_after(&self) -> &Asn1TimeRef {
         unsafe {
@@ -524,7 +524,7 @@ impl X509Ref {
         }
     }
 
-    #[cfg(feature = "fips")]
+    #[cfg(any(feature = "fips", feature = "frankenfips"))]
     /// Returns the certificate's Not After validity period.
     pub fn not_after(&self) -> Result<Asn1Time, ErrorStack> {
         unsafe {
@@ -534,7 +534,7 @@ impl X509Ref {
         }
     }
 
-    #[cfg(not(feature = "fips"))]
+    #[cfg(not(any(feature = "fips", feature = "frankenfips")))]
     /// Returns the certificate's Not Before validity period.
     pub fn not_before(&self) -> &Asn1TimeRef {
         unsafe {
@@ -544,7 +544,7 @@ impl X509Ref {
         }
     }
 
-    #[cfg(feature = "fips")]
+    #[cfg(any(feature = "fips", feature = "frankenfips"))]
     /// Returns the certificate's Not Before validity period.
     pub fn not_before(&self) -> Result<Asn1Time, ErrorStack> {
         unsafe {
@@ -1206,7 +1206,7 @@ impl X509ReqRef {
         ffi::i2d_X509_REQ
     }
 
-    #[cfg(not(feature = "fips"))]
+    #[cfg(not(any(feature = "fips", feature = "frankenfips")))]
     /// Returns the numerical value of the version field of the certificate request.
     ///
     /// This corresponds to [`X509_REQ_get_version`]
@@ -1216,7 +1216,7 @@ impl X509ReqRef {
         unsafe { X509_REQ_get_version(self.as_ptr()) as i32 }
     }
 
-    #[cfg(not(feature = "fips"))]
+    #[cfg(not(any(feature = "fips", feature = "frankenfips")))]
     /// Returns the subject name of the certificate request.
     ///
     /// This corresponds to [`X509_REQ_get_subject_name`]
@@ -1452,10 +1452,10 @@ impl Stackable for X509Object {
 use crate::ffi::{X509_get0_notAfter, X509_get0_notBefore, X509_get0_signature, X509_up_ref};
 
 use crate::ffi::X509_OBJECT_get0_X509;
-#[cfg(feature = "fips")]
+#[cfg(any(feature = "fips", feature = "frankenfips"))]
 use crate::ffi::X509_STORE_CTX_get1_chain;
 use crate::ffi::{ASN1_STRING_get0_data, X509_ALGOR_get0, X509_set_notAfter, X509_set_notBefore};
-#[cfg(not(feature = "fips"))]
+#[cfg(not(any(feature = "fips", feature = "frankenfips")))]
 use crate::ffi::{X509_REQ_get_subject_name, X509_REQ_get_version, X509_STORE_CTX_get0_chain};
 
 #[allow(bad_style)]

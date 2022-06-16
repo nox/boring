@@ -81,7 +81,10 @@ fn mk_request(privkey: &PKey<Private>) -> Result<X509Req, ErrorStack> {
 }
 
 /// Make a certificate and private key signed by the given CA cert and private key
-#[cfg_attr(feature = "fips", allow(unreachable_code, unused_variables))]
+#[cfg_attr(
+    any(feature = "fips", feature = "frankenfips"),
+    allow(unreachable_code, unused_variables)
+)]
 fn mk_ca_signed_cert(
     ca_cert: &X509Ref,
     ca_privkey: &PKeyRef<Private>,
@@ -100,9 +103,9 @@ fn mk_ca_signed_cert(
     };
     cert_builder.set_serial_number(&serial_number)?;
 
-    #[cfg(not(feature = "fips"))]
+    #[cfg(not(any(feature = "fips", feature = "frankenfips")))]
     cert_builder.set_subject_name(req.subject_name())?;
-    #[cfg(feature = "fips")]
+    #[cfg(any(feature = "fips", feature = "frankenfips"))]
     {
         eprintln!("mk_certs not supported with FIPS module");
         std::process::exit(1);

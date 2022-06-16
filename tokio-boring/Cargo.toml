@@ -23,3 +23,7 @@ anyhow = "1"
 
 [features]
 fips = ["boring/fips"]
+# Use a FIPS-validated bcm.o with newer version of boringssl.
+# Using this feature requires installing pre-built bcm.o and using extra linker flags.
+# See top-level README for instructions
+frankenfips = ["boring/frankenfips"]

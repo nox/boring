@@ -1,3 +1,4 @@
+#[cfg(not(any(feature = "fips", feature = "frankenfips")))]
 use boring::pkey::PKey;
 use boring::ssl::{SslAcceptor, SslConnector, SslFiletype, SslMethod};
 use futures::future;
@@ -48,16 +49,19 @@ fn create_server(
     let addr = listener.local_addr().unwrap();
 
     let server = async move {
-        let acceptor = if rpk {
-            let mut acceptor = SslAcceptor::rpk().unwrap();
-            let pkey = std::fs::read("tests/key.pem").unwrap();
-            let pkey = PKey::private_key_from_pem(&pkey).unwrap();
-            let cert = std::fs::read("tests/pubkey.der").unwrap();
-
-            acceptor.set_rpk_certificate(&cert).unwrap();
-            acceptor.set_null_chain_private_key(&pkey).unwrap();
-
-            acceptor
+        let acceptor = if rpk && !cfg!(any(feature = "fips", feature = "frankenfips")) {
+            #[cfg(not(any(feature = "fips", feature = "frankenfips")))]
+            {
+                let mut acceptor = SslAcceptor::rpk().unwrap();
+                let pkey = std::fs::read("tests/key.pem").unwrap();
+                let pkey = PKey::private_key_from_pem(&pkey).unwrap();
+                let cert = std::fs::read("tests/pubkey.der").unwrap();
+                acceptor.set_rpk_certificate(&cert).unwrap();
+                acceptor.set_null_chain_private_key(&pkey).unwrap();
+                acceptor
+            }
+            #[cfg(any(feature = "fips", feature = "frankenfips"))]
+            unreachable!()
         } else {
             let mut acceptor = SslAcceptor::mozilla_intermediate(SslMethod::tls()).unwrap();
             acceptor
@@ -116,6 +120,7 @@ async fn server() {
     future::join(server, client).await;
 }
 
+#[cfg(not(any(feature = "fips", feature = "frankenfips")))]
 #[tokio::test]
 async fn server_rpk() {
     let (stream, addr) = create_server(true);
@@ -155,6 +160,7 @@ async fn server_rpk() {
     future::join(server, client).await;
 }
 
+#[cfg(not(any(feature = "fips", feature = "frankenfips")))]
 #[tokio::test]
 async fn client_rpk_unknown_cert() {
     let (stream, addr) = create_server(true);

@@ -1,0 +1,2 @@
+[target.'cfg(feature = "frankenfips")']
+rustflags = ["-C", "link-args=-Wl,-zmuldefs"]
