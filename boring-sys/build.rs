@@ -359,15 +359,26 @@ fn main() -> io::Result<()> {
         );
     }
 
-    // patch <bssl_dir>/libcrypto.a with fips-certified bcm.o
+    // patch libcrypto.a with fips-certified bcm.o
     if cfg!(feature = "frankenfips") {
-        let libcrypto_path = format!("{bssl_dir}/libcrypto.a");
+        let libcrypto_path = format!("{bssl_dir}/build/crypto/libcrypto.a");
+        assert!(Path::new(&libcrypto_path).exists());
         let bcm_o_path = "/opt/boringssl-fips/lib/bcm.o";
         let bcm_o_new_path = format!("{bssl_dir}/build/bcm-fips.o");
         fs::copy(bcm_o_path, &bcm_o_new_path).unwrap();
-        // insert fips bcm.o before bcm.c.o into libcrypto.a,
-        // so for all duplicate symbols the older bcm.o is used
-        run_command(Command::new("ar").args(["rb", "bcm.c.o", &libcrypto_path, &bcm_o_new_path]))
+        // check that fips module is named as expected
+        let ar_t_out = Command::new("ar")
+            .args(["t", &libcrypto_path, "bcm.o"])
+            .output()
+            .expect("failed to get output from ar");
+        let ar_t_out = String::from_utf8(ar_t_out.stdout).unwrap();
+        assert_eq!(ar_t_out.trim(), "bcm.o");
+        // insert fips bcm.o before bcm.o into libcrypto.a,
+        // so for all duplicate symbols the older fips bcm.o is used
+        // (this causes the need for extra linker flags to deal with duplicate symbols)
+        // (as long as the newer module does not define new symbols, one may also remove it,
+        // but once there are new symbols it would cause missing symbols at linking stage)
+        run_command(Command::new("ar").args(["rb", "bcm.o", &libcrypto_path, &bcm_o_new_path]))
             .expect("failed to run ar command");
     }
 
