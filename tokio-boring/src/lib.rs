@@ -26,15 +26,22 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
+mod async_callbacks;
+
+use self::async_callbacks::TASK_CONTEXT_INDEX;
+pub use self::async_callbacks::{AsyncSelectCertError, SslContextBuilderExt};
+
 /// Asynchronously performs a client-side TLS handshake over the provided stream.
 pub async fn connect<S>(
-    config: ConnectConfiguration,
+    mut config: ConnectConfiguration,
     domain: &str,
     stream: S,
 ) -> Result<SslStream<S>, HandshakeError<S>>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
+    config.ssl_mut().set_ex_data(*TASK_CONTEXT_INDEX, 0);
+
     handshake(|s| config.connect(domain, s), stream).await
 }
 
@@ -43,7 +50,13 @@ pub async fn accept<S>(acceptor: &SslAcceptor, stream: S) -> Result<SslStream<S>
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    handshake(|s| acceptor.accept(s), stream).await
+    let mut ssl = acceptor
+        .new_session()
+        .map_err(|e| HandshakeError(e.into()))?;
+
+    ssl.set_ex_data(*TASK_CONTEXT_INDEX, 0);
+
+    handshake(|s| ssl.accept(s), stream).await
 }
 
 async fn handshake<F, S>(f: F, stream: S) -> Result<SslStream<S>, HandshakeError<S>>
@@ -161,6 +174,11 @@ impl<S> SslStream<S> {
     /// Returns a shared reference to the `Ssl` object associated with this stream.
     pub fn ssl(&self) -> &SslRef {
         self.0.ssl()
+    }
+
+    /// Returns a mutable reference to the `Ssl` object associated with this stream.
+    pub fn ssl_mut(&mut self) -> &mut SslRef {
+        self.0.ssl_mut()
     }
 
     /// Returns a shared reference to the underlying stream.
@@ -367,13 +385,18 @@ where
             stream: inner.stream,
             context: ctx as *mut _ as usize,
         };
+
         match (inner.f)(stream) {
             Ok(mut s) => {
                 s.get_mut().context = 0;
+                s.ssl_mut().set_ex_data(*TASK_CONTEXT_INDEX, 0);
+
                 Poll::Ready(Ok(StartedHandshake::Done(SslStream(s))))
             }
             Err(ssl::HandshakeError::WouldBlock(mut s)) => {
                 s.get_mut().context = 0;
+                s.ssl_mut().set_ex_data(*TASK_CONTEXT_INDEX, 0);
+
                 Poll::Ready(Ok(StartedHandshake::Mid(s)))
             }
             Err(e) => Poll::Ready(Err(HandshakeError(e))),
@@ -396,13 +419,20 @@ where
         let mut s = self.0.take().expect("future polled after completion");
 
         s.get_mut().context = ctx as *mut _ as usize;
+        s.ssl_mut()
+            .set_ex_data(*TASK_CONTEXT_INDEX, ctx as *mut _ as usize);
+
         match s.handshake() {
             Ok(mut s) => {
                 s.get_mut().context = 0;
+                s.ssl_mut().set_ex_data(*TASK_CONTEXT_INDEX, 0);
+
                 Poll::Ready(Ok(SslStream(s)))
             }
             Err(ssl::HandshakeError::WouldBlock(mut s)) => {
                 s.get_mut().context = 0;
+                s.ssl_mut().set_ex_data(*TASK_CONTEXT_INDEX, 0);
+
                 self.0 = Some(s);
                 Poll::Pending
             }

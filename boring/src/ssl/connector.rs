@@ -189,6 +189,10 @@ impl ConnectConfiguration {
         self.verify_hostname = verify_hostname;
     }
 
+    pub fn ssl_mut(&mut self) -> &mut SslRef {
+        &mut self.ssl
+    }
+
     /// Initiates a client-side TLS session on a stream.
     ///
     /// The domain is used for SNI and hostname verification if enabled.
@@ -324,8 +328,12 @@ impl SslAcceptor {
     where
         S: Read + Write,
     {
-        let ssl = Ssl::new(&self.0)?;
-        ssl.accept(stream)
+        self.new_session()?.accept(stream)
+    }
+
+    /// Creates a new TLS session, ready to accept a stream.
+    pub fn new_session(&self) -> Result<Ssl, ErrorStack> {
+        Ssl::new(&self.0)
     }
 
     /// Consumes the `SslAcceptor`, returning the inner raw `SslContext`.
