@@ -195,11 +195,11 @@ pub unsafe extern "C" fn raw_select_cert<F>(
     client_hello: *const ffi::SSL_CLIENT_HELLO,
 ) -> ffi::ssl_select_cert_result_t
 where
-    F: Fn(&ClientHello) -> Result<(), SelectCertError> + Sync + Send + 'static,
+    F: Fn(ClientHello<'_>) -> Result<(), SelectCertError> + Sync + Send + 'static,
 {
-    let ssl = SslRef::from_ptr_mut((*client_hello).ssl);
-    let client_hello = &*(client_hello as *const ClientHello);
-    let callback = ssl
+    let mut client_hello = ClientHello(&*client_hello);
+    let callback = client_hello
+        .ssl_mut()
         .ssl_context()
         .ex_data(SslContext::cached_ex_index::<F>())
         .expect("BUG: select cert callback missing") as *const F;

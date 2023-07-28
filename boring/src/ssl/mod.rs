@@ -1365,6 +1365,7 @@ impl SslContextBuilder {
             );
         }
     }
+
     /// Sets a callback that is called before most ClientHello processing and before the decision whether
     /// to resume a session is made. The callback may inspect the ClientHello and configure the
     /// connection.
@@ -1374,7 +1375,7 @@ impl SslContextBuilder {
     /// [`SSL_CTX_set_select_certificate_cb`]: https://www.openssl.org/docs/man1.1.0/ssl/SSL_CTX_set_select_certificate_cb.html
     pub fn set_select_certificate_callback<F>(&mut self, callback: F)
     where
-        F: Fn(&ClientHello) -> Result<(), SelectCertError> + Sync + Send + 'static,
+        F: Fn(ClientHello<'_>) -> Result<(), SelectCertError> + Sync + Send + 'static,
     {
         unsafe {
             self.set_ex_data(SslContext::cached_ex_index::<F>(), callback);
@@ -1944,9 +1945,9 @@ pub struct CipherBits {
 }
 
 #[repr(transparent)]
-pub struct ClientHello(ffi::SSL_CLIENT_HELLO);
+pub struct ClientHello<'ssl>(&'ssl ffi::SSL_CLIENT_HELLO);
 
-impl ClientHello {
+impl ClientHello<'_> {
     /// Returns the data of a given extension, if present.
     ///
     /// This corresponds to [`SSL_early_callback_ctx_extension_get`].
@@ -1957,7 +1958,7 @@ impl ClientHello {
             let mut ptr = ptr::null();
             let mut len = 0;
             let result =
-                ffi::SSL_early_callback_ctx_extension_get(&self.0, ext_type.0, &mut ptr, &mut len);
+                ffi::SSL_early_callback_ctx_extension_get(self.0, ext_type.0, &mut ptr, &mut len);
             if result == 0 {
                 return None;
             }
@@ -1965,7 +1966,11 @@ impl ClientHello {
         }
     }
 
-    fn ssl(&self) -> &SslRef {
+    pub fn ssl_mut(&mut self) -> &mut SslRef {
+        unsafe { SslRef::from_ptr_mut(self.0.ssl) }
+    }
+
+    pub fn ssl(&self) -> &SslRef {
         unsafe { SslRef::from_ptr(self.0.ssl) }
     }
 
