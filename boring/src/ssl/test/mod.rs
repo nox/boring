@@ -442,6 +442,67 @@ fn test_alpn_server_advertise_multiple() {
 }
 
 #[test]
+fn test_use_callback_after_free() {
+    struct YellOnDrop;
+
+    impl std::ops::Drop for YellOnDrop {
+        fn drop(&mut self) {
+            println!("ohno i dropped");
+        }
+    }
+
+    let mut server = Server::builder();
+
+    server
+        .ctx()
+        .set_select_certificate_callback(move |mut client_hello| {
+            let yell_on_drop = YellOnDrop;
+
+            let mut builder = mem::replace(
+                Server::builder().ctx(),
+                SslContextBuilder::new(SslMethod::tls_server()).unwrap(),
+            );
+
+            builder.set_alpn_select_callback(move |ssl, _client| {
+                println!("start");
+
+                let _capture_the_yelling = &yell_on_drop;
+
+                ssl.set_ssl_context(
+                    &mem::replace(
+                        Server::builder().ctx(),
+                        SslContextBuilder::new(SslMethod::tls_server()).unwrap(),
+                    )
+                    .build(),
+                )
+                .unwrap();
+
+                println!("end");
+
+                Err(ssl::AlpnError::NOACK)
+            });
+
+            client_hello
+                .ssl_mut()
+                .set_ssl_context(&builder.build())
+                .unwrap();
+
+            Ok(())
+        });
+
+    server.ctx().set_alpn_select_callback(|_, client| {
+        ssl::select_next_proto(b"\x08http/1.1\x08spdy/3.1", client).ok_or(ssl::AlpnError::NOACK)
+    });
+
+    let server = server.build();
+    let mut client = server.client();
+
+    client.ctx().set_alpn_protos(b"\x08spdy/3.1").unwrap();
+
+    let _ = client.connect();
+}
+
+#[test]
 fn test_alpn_server_select_none_fatal() {
     let mut server = Server::builder();
     server.ctx().set_alpn_select_callback(|_, client| {
